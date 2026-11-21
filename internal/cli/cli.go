@@ -35,6 +35,7 @@ func Execute() int {
 func newRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:           "store",
+		Version:       commandVersion(),
 		Short:         "Keep files, folders, and text in a secure vault and pull them on other computers",
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -187,13 +187,35 @@ internal/archive/           ZIP packing and safe extraction
 internal/restore/           Destination checks and staged publication
 internal/testsupport/fakeop/ Simulated 1Password CLI for tests
 .github/workflows/ci.yml     macOS and Linux checks
+Taskfile.yml                Development and release commands
+.goreleaser.yml             Release binaries, archives, and checksums
+scripts/                    Release helper and isolated Git tests
 ```
 
+Install the development tools once (or use `brew install go-task goreleaser`):
+
 ```sh
-gofmt -w cmd internal
-go test -race ./...
-go vet ./...
-go build -o dist/store ./cmd/store
+go install github.com/go-task/task/v3/cmd/task@v3.54.0
+go install github.com/goreleaser/goreleaser/v2@v2.20.3
+```
+
+Make sure `$(go env GOPATH)/bin` is on your `PATH`. Go may download a newer
+toolchain to build these tools; this does not change store's Go requirement.
+
+```sh
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
+
+Add that line to your shell configuration (for example, `~/.zshrc`) to keep
+it across sessions. `task build` does not need GoReleaser; release checks and
+snapshots do.
+
+```sh
+task                 # list commands
+task fmt
+task check           # formatting, modules, race tests, vet, build
+task run -- pull
+./dist/store --version
 ```
 
 CI runs formatting checks, module verification, race-enabled tests, vet,
@@ -203,6 +225,66 @@ The end-to-end tests in `cmd/store` build the real `store` binary and run it
 against `internal/testsupport/fakeop`, a stand-in for `op` backed by a JSON
 file. They simulate two computers with separate configurations sharing one
 vault. They never call the real `op` or touch your vault.
+
+### Releases
+
+Git tags are the version source; there is no version file to edit or version
+commit to create. Releasing requires GitHub write access, authenticated Git,
+and a configured Git identity for annotated tags.
+
+1. Merge the changes into `main` and confirm CI passes.
+2. Update your checkout and check that it has no uncommitted or untracked
+   changes:
+
+   ```sh
+   git switch main
+   git pull --ff-only origin main
+   git status --short
+   ```
+
+   The last command should print nothing.
+3. Preview the version, then run the command for the desired bump:
+
+   ```sh
+   task release:patch -- --dry-run  # validate and preview; no tag or push
+   task release:patch              # v0.1.0 initially, then v0.1.1, etc.
+   task release:minor              # v0.1.1 -> v0.2.0
+   task release:major              # v0.2.0 -> v1.0.0
+   ```
+
+   Replace `patch` with `minor` or `major` in the preview when needed.
+4. Watch the [Release workflow](https://github.com/kshehadeh/store/actions/workflows/release.yml).
+   A successful tag push starts the workflow; it does not mean publishing
+   has finished.
+5. Check [GitHub Releases](https://github.com/kshehadeh/store/releases) for the
+   new version. Verify the downloaded archive against `checksums.txt` and
+   run its binary with `store --version` to confirm the expected tag.
+
+The first release is always `v0.1.0`. Later commands increment the highest
+stable semantic-version tag, ignoring prerelease tags. They require a clean
+`main` branch matching `origin/main`, fetch tags, run `task check` and
+`task release:check`, then create an annotated tag and push only that tag.
+They do not commit files, push uncommitted changes, or force-push anything.
+If a tag push fails, the local tag remains so you can inspect and retry it.
+If the workflow fails after the tag is pushed, inspect its logs. Transient
+failures can be retried in GitHub Actions; fixes to the code or workflow
+should use a new version rather than moving an existing release tag.
+
+Pushing a `vMAJOR.MINOR.PATCH` tag triggers the release workflow. It validates
+the tagged commit, then GoReleaser publishes a GitHub release with generated
+notes, macOS/Linux binaries for amd64 and arm64, `.tar.gz` archives, and
+`checksums.txt`. The workflow uses GitHub's built-in token; no separate
+publishing secret is needed. Releases remain private with this repository.
+
+To build the same packages locally without tagging or publishing:
+
+```sh
+task release:snapshot
+```
+
+Snapshot artifacts go to the ignored `dist/` directory. Release binaries
+report their tag with `store --version`; `go install ...@VERSION` also
+reports the module version.
 
 ### Smoke test against a real, disposable vault
 
@@ -228,6 +310,52 @@ rm /tmp/store-smoke.txt /tmp/store-smoke-pulled.txt
 ```
 
 Run `store setup` again afterwards to point at your real vault.
+
+## Contributing
+
+This is a private repository, so contributors need repository access and
+GitHub authentication for Git.
+
+```sh
+git clone https://github.com/kshehadeh/store.git
+cd store
+git switch -c feat/describe-your-change
+```
+
+Install the tools listed under [Development](#development), then:
+
+1. Keep changes focused. Keep `cmd/store` thin, command wiring in
+   `internal/cli`, application behavior in `internal/app`, and vault-specific
+   behavior in the provider adapter.
+2. Add regression tests alongside the affected package. Extend the fake
+   `op` and end-to-end tests when changing command behavior. Preserve exact
+   pulled output on stdout, prompts on stderr, explicit field selection,
+   and the refusal to overwrite existing destinations.
+3. Update the README when commands, flags, or workflows change.
+4. Run the same checks used by CI:
+
+   ```sh
+   task fmt
+   task check release:check
+   ```
+
+   For packaging changes, also run `task release:snapshot`. Snapshots do not
+   create tags or publish releases.
+5. Commit only the intended source, tests, and documentation. Use a
+   descriptive conventional commit message, such as `fix: preserve empty
+   folders on restore` or `docs: clarify vault setup`. Do not commit vault
+   configuration, credentials, real payloads, `dist/`, or `.task/`.
+6. Push your branch and open a [pull request](https://github.com/kshehadeh/store/pulls)
+   against `main`. Explain what changed, why, and which checks you ran.
+
+Automated tests use simulated vaults and isolated local Git repositories.
+They must not touch a real 1Password vault or publish a real release. Use
+only a disposable vault for the optional manual smoke test above.
+
+For a bug report, include the command, expected and observed behavior,
+`store --version`, and your OS in an [issue](https://github.com/kshehadeh/store/issues).
+Remove secret values and identifying vault or account details from logs
+before sharing them.
 
 ## Adding a provider
 

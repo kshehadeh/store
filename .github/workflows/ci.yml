@@ -31,18 +31,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Check formatting
-        run: |
-          files=$(gofmt -l cmd internal)
-          if [ -n "$files" ]; then
-            printf 'Run gofmt on:\n%s\n' "$files"
-            exit 1
-          fi
-      - name: Verify modules
-        run: go mod verify
-      - name: Test
-        run: go test -race ./...
-      - name: Vet
-        run: go vet ./...
-      - name: Build
-        run: go build -o dist/store ./cmd/store
+      - name: Install Task
+        run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          distribution: goreleaser
+          version: v2.20.3
+          install-only: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Validate
+        run: task check release:check
