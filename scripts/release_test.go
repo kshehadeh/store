@@ -27,7 +27,11 @@ func newFixtureFrom(t *testing.T, source, script string) fixture {
 	t.Helper()
 	root := t.TempDir()
 	f := fixture{t: t, repo: filepath.Join(root, "repo"), remote: filepath.Join(root, "origin.git"), script: script}
-	runGit(t, source, "clone", "--quiet", "--bare", "--no-hardlinks", "--no-tags", source, f.remote)
+	// Fetch only the source commit as main: a tag checkout in CI is detached and
+	// may have no local branches, and real release tags must not leak in.
+	runGit(t, root, "init", "--quiet", "--bare", "--initial-branch=main", f.remote)
+	runGit(t, f.remote, "fetch", "--quiet", "--no-tags", "--update-shallow", source, "HEAD:refs/heads/main")
+	runGit(t, f.remote, "rev-parse", "--verify", "--quiet", "refs/heads/main")
 	runGit(t, root, "clone", "--quiet", "--no-tags", f.remote, f.repo)
 	bin := filepath.Join(root, "bin")
 	if err := os.Mkdir(bin, 0o700); err != nil {
