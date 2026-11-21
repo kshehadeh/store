@@ -33,6 +33,9 @@ jobs:
           cache: true
       - name: Install Task
         run: go install github.com/go-task/task/v3/cmd/task@v3.54.0
+        env:
+          # Task needs a newer Go than go.mod; only this install may download one.
+          GOTOOLCHAIN: auto
       - name: Install GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
