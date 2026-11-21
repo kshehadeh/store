@@ -19,6 +19,20 @@ builds:
     ldflags:
       - -s -w -X github.com/kshehadeh/store/internal/cli.Version=v{{ .Version }}
 
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids: [store]
+      sign:
+        certificate: '{{ .Env.MACOS_SIGN_P12 }}'
+        password: '{{ .Env.MACOS_SIGN_PASSWORD }}'
+      notarize:
+        issuer_id: '{{ .Env.MACOS_NOTARY_ISSUER_ID }}'
+        key_id: '{{ .Env.MACOS_NOTARY_KEY_ID }}'
+        key: '{{ .Env.MACOS_NOTARY_KEY }}'
+        wait: true
+        timeout: 20m
+
 archives:
   - formats: [tar.gz]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
@@ -36,3 +50,19 @@ release:
     owner: kshehadeh
     name: store
   name_template: '{{ .Tag }}'
+
+homebrew_casks:
+  - name: store
+    binaries: [store]
+    homepage: https://github.com/kshehadeh/store
+    description: Keep files, folders, and text in a 1Password vault and pull them back anywhere
+    directory: Casks
+    commit_msg_template: 'store {{ .Tag }}'
+    skip_upload: auto
+    repository:
+      owner: kshehadeh
+      name: homebrew-tap
+      branch: main
+      git:
+        url: git@github.com:kshehadeh/homebrew-tap.git
+        private_key: '{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}'

@@ -18,18 +18,25 @@ Transfers are explicit snapshots, not background sync.
 
 ## Install
 
-Requires Go 1.26+ and the [1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`).
+With [Homebrew](https://brew.sh) on macOS or Linux:
+
+```sh
+brew install --cask kshehadeh/tap/store
+brew upgrade --cask kshehadeh/tap/store   # later, to update
+```
+
+The cask comes from [kshehadeh/homebrew-tap](https://github.com/kshehadeh/homebrew-tap)
+and installs the signed, notarized release binary. You also need the
+[1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`),
+for example `brew install --cask 1password-cli`.
+
+To build from source instead (requires Go 1.26+):
 
 ```sh
 go install github.com/kshehadeh/store/cmd/store@latest
 # or, from a checkout:
 go build -o ~/bin/store ./cmd/store
 ```
-
-For this private repository, Git must be authenticated with GitHub. Set
-`GOPRIVATE=github.com/kshehadeh/store` when installing by module path so Go
-does not query the public module proxy or checksum database. Building from
-a checkout does not need this setting.
 
 ### Run without installing
 
@@ -188,7 +195,7 @@ internal/restore/           Destination checks and staged publication
 internal/testsupport/fakeop/ Simulated 1Password CLI for tests
 .github/workflows/ci.yml     macOS and Linux checks
 Taskfile.yml                Development and release commands
-.goreleaser.yml             Release binaries, archives, and checksums
+.goreleaser.yml             Release binaries, signing, archives, checksums, cask
 scripts/                    Release helper and isolated Git tests
 ```
 
@@ -271,10 +278,34 @@ failures can be retried in GitHub Actions; fixes to the code or workflow
 should use a new version rather than moving an existing release tag.
 
 Pushing a `vMAJOR.MINOR.PATCH` tag triggers the release workflow. It validates
-the tagged commit, then GoReleaser publishes a GitHub release with generated
-notes, macOS/Linux binaries for amd64 and arm64, `.tar.gz` archives, and
-`checksums.txt`. The workflow uses GitHub's built-in token; no separate
-publishing secret is needed. Releases remain private with this repository.
+the tagged commit, then GoReleaser signs and notarizes the macOS binaries and
+publishes a GitHub release with generated notes, macOS/Linux binaries for amd64
+and arm64, `.tar.gz` archives, and `checksums.txt`. It then commits an updated
+`Casks/store.rb` to [kshehadeh/homebrew-tap](https://github.com/kshehadeh/homebrew-tap).
+
+The workflow refuses to publish unless these repository secrets exist:
+
+| Secret | Contents |
+|---|---|
+| `MACOS_SIGN_P12` | Base64 of the exported "Developer ID Application" certificate (`.p12`) |
+| `MACOS_SIGN_PASSWORD` | Password for that `.p12` file |
+| `MACOS_NOTARY_KEY` | Base64 of the App Store Connect API key (`.p8`) |
+| `MACOS_NOTARY_KEY_ID` | That API key's ID |
+| `MACOS_NOTARY_ISSUER_ID` | The App Store Connect issuer ID |
+| `HOMEBREW_TAP_DEPLOY_KEY` | Private SSH key for the tap's write-enabled deploy key |
+
+Set file-based secrets without writing the encoded value anywhere:
+
+```sh
+base64 -i Certificates.p12 | gh secret set MACOS_SIGN_P12 --repo kshehadeh/store
+base64 -i AuthKey_XXXXXXXXXX.p8 | gh secret set MACOS_NOTARY_KEY --repo kshehadeh/store
+gh secret set MACOS_SIGN_PASSWORD --repo kshehadeh/store   # prompts for the value
+```
+
+Unsigned macOS binaries installed through the cask are quarantined and blocked
+by Gatekeeper, so do not publish without signing. GitHub's built-in token
+publishes the release itself; it cannot write to the tap, which is why the
+deploy key exists.
 
 To build the same packages locally without tagging or publishing:
 
@@ -313,8 +344,7 @@ Run `store setup` again afterwards to point at your real vault.
 
 ## Contributing
 
-This is a private repository, so contributors need repository access and
-GitHub authentication for Git.
+Fork the repository, or clone it directly if you have write access:
 
 ```sh
 git clone https://github.com/kshehadeh/store.git
