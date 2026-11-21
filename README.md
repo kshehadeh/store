@@ -18,51 +18,61 @@ Transfers are explicit snapshots, not background sync.
 
 ## Install
 
-With [Homebrew](https://brew.sh) on macOS or Linux:
+`store` runs on macOS and Linux (amd64 and arm64). It needs the
+[1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`).
+
+### Homebrew (recommended)
 
 ```sh
 brew install --cask kshehadeh/tap/store
-brew upgrade --cask kshehadeh/tap/store   # later, to update
+brew install --cask 1password-cli   # if you don't already have op
+store --version
 ```
 
-The cask comes from [kshehadeh/homebrew-tap](https://github.com/kshehadeh/homebrew-tap)
-and installs the signed, notarized release binary. You also need the
-[1Password CLI](https://developer.1password.com/docs/cli/get-started/) (`op`),
-for example `brew install --cask 1password-cli`.
+Update or remove it later with:
 
-To build from source instead (requires Go 1.26+):
+```sh
+brew upgrade --cask kshehadeh/tap/store
+brew uninstall --cask kshehadeh/tap/store
+```
+
+The cask comes from [kshehadeh/homebrew-tap](https://github.com/kshehadeh/homebrew-tap).
+On macOS it installs the release binary signed with a Developer ID and
+notarized by Apple, so Gatekeeper allows it without extra steps.
+
+If `store --version` doesn't show the release you installed, an older `store`
+alias or binary is probably taking precedence. Check with `type store`.
+
+### Download a release
+
+Each [GitHub release](https://github.com/kshehadeh/store/releases) has a
+`.tar.gz` archive per platform and a `checksums.txt` file. For example, on an
+Apple Silicon Mac:
+
+```sh
+version=0.1.1   # the release you want, without the leading "v"
+curl -LO "https://github.com/kshehadeh/store/releases/download/v$version/store_${version}_darwin_arm64.tar.gz"
+curl -LO "https://github.com/kshehadeh/store/releases/download/v$version/checksums.txt"
+shasum -a 256 -c --ignore-missing checksums.txt
+tar xzf "store_${version}_darwin_arm64.tar.gz" store
+install -m 0755 store ~/.local/bin/store   # any directory on your PATH
+```
+
+Use `darwin_amd64` for Intel Macs, or `linux_amd64`/`linux_arm64` on Linux
+(where `sha256sum -c --ignore-missing checksums.txt` also works).
+
+### Build from source
+
+With Go 1.26 or newer:
 
 ```sh
 go install github.com/kshehadeh/store/cmd/store@latest
-# or, from a checkout:
-go build -o ~/bin/store ./cmd/store
 ```
 
-### Run without installing
+This installs to `$(go env GOPATH)/bin`, which must be on your `PATH`. To work
+on `store` itself, see [Development](#development).
 
-From a checkout, `go run` compiles into Go's build cache and runs the CLI in
-one step, so there is no binary to build or put on your `PATH`. Put `store`'s
-own arguments after the package path:
-
-```sh
-cd selfstore
-go run ./cmd/store status
-go run ./cmd/store keep ~/.env --name root-env --tag project/api
-go run ./cmd/store pull root-env --to ~/.env
-```
-
-For everyday use, build a local binary and point your alias at it:
-
-```sh
-go -C ~/dev/karim/selfstore build -o dist/store ./cmd/store
-unalias store 2>/dev/null || true
-alias store="$HOME/dev/karim/selfstore/dist/store"
-```
-
-The binary runs in your current directory, so relative paths work normally.
-Re-run the build after changing the source; Go reuses its build cache.
-Unlike `go run`, the binary does not print an extra `exit status 1` line when
-a command fails. It still returns a nonzero exit code and prints useful errors.
+Next, [set up each computer](#set-up-each-computer).
 
 ## Set up each computer
 
@@ -224,6 +234,29 @@ task check           # formatting, modules, race tests, vet, build
 task run -- pull
 ./dist/store --version
 ```
+
+### Running from a checkout
+
+`go run` compiles into Go's build cache and runs the CLI in one step. Put
+`store`'s own arguments after the package path:
+
+```sh
+go run ./cmd/store status
+go run ./cmd/store pull root-env --to ~/.env
+```
+
+When `go run` exits with an error, Go prints an extra `exit status 1` line.
+To avoid that in daily use, build a binary and point an alias at it (replace
+the path with your checkout):
+
+```sh
+go -C ~/src/store build -o dist/store ./cmd/store
+alias store="$HOME/src/store/dist/store"
+```
+
+The binary runs in your current directory, so relative paths work normally.
+Rebuild after changing the source. Remove the alias (`unalias store`) to go
+back to an installed release.
 
 CI runs formatting checks, module verification, race-enabled tests, vet,
 and a build on macOS and Linux. Its tests use only the simulated vault.
