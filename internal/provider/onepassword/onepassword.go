@@ -325,7 +325,21 @@ func (a *Adapter) CreateDocument(ctx context.Context, doc provider.Document) (st
 	// not turn a successful create into a reported failure.
 	_ = json.Unmarshal(out, &res)
 	if res.UUID != "" {
-		return res.UUID, nil
+		id := res.UUID
+		if doc.Description != nil {
+			if err := a.setDescription(ctx, id, *doc.Description); err != nil {
+				return id, fmt.Errorf("document %q was created, but setting its description failed: %w", doc.Title, err)
+			}
+		}
+		return id, nil
+	}
+	if doc.Description != nil {
+		if res.ID == "" {
+			return "", errors.New("document was created, but 1Password returned no item ID to set its description")
+		}
+		if err := a.setDescription(ctx, res.ID, *doc.Description); err != nil {
+			return res.ID, fmt.Errorf("document %q was created, but setting its description failed: %w", doc.Title, err)
+		}
 	}
 	return res.ID, nil
 }
@@ -336,6 +350,21 @@ func (a *Adapter) UpdateDocument(ctx context.Context, id string, doc provider.Do
 		"--title", doc.Title,
 		"--file-name", doc.FileName,
 		"--tags", strings.Join(doc.Tags, ","))
+	if err != nil {
+		return err
+	}
+	if doc.Description != nil {
+		if err := a.setDescription(ctx, id, *doc.Description); err != nil {
+			return fmt.Errorf("document content was updated, but setting its description failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func (a *Adapter) setDescription(ctx context.Context, id, description string) error {
+	_, err := a.op(ctx, nil, "item", "edit", id,
+		"Description[text]="+description,
+		"--vault", a.vault)
 	return err
 }
 

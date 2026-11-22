@@ -20,10 +20,11 @@ import (
 )
 
 type KeepOptions struct {
-	Path string
-	Text bool
-	Name string
-	Tags []string
+	Path        string
+	Text        bool
+	Name        string
+	Tags        []string
+	Description *string
 }
 
 type payload struct {
@@ -67,7 +68,7 @@ func (a *App) Keep(ctx context.Context, o KeepOptions) error {
 		return err
 	}
 	meta := a.metaTags(p.kind, p.sourceDir)
-	doc := provider.Document{Title: name, FileName: p.fileName, Content: p.content}
+	doc := provider.Document{Title: name, FileName: p.fileName, Content: p.content, Description: o.Description}
 	if existing == nil {
 		doc.Tags = tags.Merge(nil, userTags, meta)
 		if _, err := a.Provider.CreateDocument(ctx, doc); err != nil {

@@ -150,6 +150,18 @@ func (w *world) one(title string) vaultItem {
 	return m[0]
 }
 
+func descriptionOf(it vaultItem) string {
+	for _, raw := range it.Fields {
+		field, ok := raw.(map[string]any)
+		if !ok || field["label"] != "Description" {
+			continue
+		}
+		value, _ := field["value"].(string)
+		return value
+	}
+	return ""
+}
+
 func (w *world) machine(name, host string) *machine {
 	w.t.Helper()
 	home := filepath.Join(w.root, name, "home")
@@ -409,6 +421,34 @@ func TestKeepAndPullFile(t *testing.T) {
 		if strings.Contains(readFile(t, w.log), secret) {
 			t.Errorf("payload %q appeared in op arguments", secret)
 		}
+	}
+}
+
+func TestKeepDescription(t *testing.T) {
+	w, a, _ := twoMachines(t)
+	path := filepath.Join(a.home, "settings.json")
+	write(t, path, `{"region":"west"}`, 0o600)
+
+	description := "Local API settings = staging"
+	a.ok(opts{}, "keep", path, "--name", "settings", "--description", description)
+	it := w.one("settings")
+	if got := descriptionOf(it); got != description {
+		t.Fatalf("created description = %q; want %q", got, description)
+	}
+
+	// Omitting --description on a later keep preserves the stored field.
+	write(t, path, `{"region":"east"}`, 0o600)
+	a.ok(opts{}, "keep", path, "--name", "settings")
+	it = w.one("settings")
+	if got := descriptionOf(it); got != description {
+		t.Fatalf("description after keep without flag = %q; want %q", got, description)
+	}
+
+	updatedDescription := "Production settings"
+	a.ok(opts{}, "keep", path, "--name", "settings", "--description", updatedDescription)
+	it = w.one("settings")
+	if got := descriptionOf(it); got != updatedDescription {
+		t.Fatalf("updated description = %q; want %q", got, updatedDescription)
 	}
 }
 

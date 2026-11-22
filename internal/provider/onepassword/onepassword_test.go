@@ -52,6 +52,51 @@ func TestCreateSendsPayloadOnStdin(t *testing.T) {
 	}
 }
 
+func TestCreateSetsDescriptionAsCustomTextField(t *testing.T) {
+	r := &recorder{out: map[string]string{"document create": `{"uuid":"abc"}`}}
+	a, err := New(r, map[string]string{"vault_id": "V1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	description := "Local API settings"
+	id, err := a.CreateDocument(context.Background(), provider.Document{
+		Title: "root-env", FileName: ".env", Description: &description, Content: strings.NewReader("SECRET=1"),
+	})
+	if err != nil || id != "abc" {
+		t.Fatalf("CreateDocument = %q, %v", id, err)
+	}
+	if len(r.calls) != 2 {
+		t.Fatalf("got %d op calls; want create plus description edit", len(r.calls))
+	}
+	want := []string{"item", "edit", "abc", "Description[text]=Local API settings", "--vault", "V1"}
+	if !slices.Equal(r.calls[1].args, want) {
+		t.Errorf("description args = %q; want %q", r.calls[1].args, want)
+	}
+}
+
+func TestUpdateDocumentSetsDescriptionWhenProvided(t *testing.T) {
+	r := &recorder{}
+	a, err := New(r, map[string]string{"vault_id": "V1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	description := "Updated description"
+	err = a.UpdateDocument(context.Background(), "abc", provider.Document{
+		Title: "root-env", FileName: ".env", Tags: []string{"store/managed"},
+		Description: &description, Content: strings.NewReader("SECRET=2"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.calls) != 2 {
+		t.Fatalf("got %d op calls; want document edit plus description edit", len(r.calls))
+	}
+	want := []string{"item", "edit", "abc", "Description[text]=Updated description", "--vault", "V1"}
+	if !slices.Equal(r.calls[1].args, want) {
+		t.Errorf("description args = %q; want %q", r.calls[1].args, want)
+	}
+}
+
 func TestListMapsCategories(t *testing.T) {
 	r := &recorder{out: map[string]string{"item list": `[
 		{"id":"1","title":"a","category":"DOCUMENT","tags":["store/x"],"updated_at":"2026-01-02T03:04:05.123Z"},

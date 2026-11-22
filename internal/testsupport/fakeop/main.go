@@ -100,6 +100,7 @@ var allowed = map[string][]string{
 	"vault get":       {},
 	"item list":       {"--vault", "--tags"},
 	"item get":        {"--vault", "--reveal"},
+	"item edit":       {"--vault", "--tags", "--title"},
 	"document create": {"--vault", "--title", "--file-name", "--tags"},
 	"document edit":   {"--vault", "--title", "--file-name", "--tags"},
 	"document get":    {"--vault", "--out-file", "--file-mode", "--force"},
@@ -211,6 +212,40 @@ func run(args []string) error {
 			g.Files = []fileOut{{ID: "file-" + it.ID, Name: it.FileName, Size: len(it.Content), ContentPath: "/v1/files/" + it.ID}}
 		}
 		return emit(g)
+	case "item edit":
+		it, err := st.find(arg(pos, 2), flags["--vault"])
+		if err != nil {
+			return err
+		}
+		assignment := arg(pos, 3)
+		if assignment != "" {
+			fieldName, value, ok := strings.Cut(assignment, "=")
+			if !ok || fieldName != "Description[text]" {
+				return fmt.Errorf("unsupported item edit assignment %q", assignment)
+			}
+			found := false
+			for i := range it.Fields {
+				if it.Fields[i].Label == "Description" {
+					it.Fields[i].Type = "STRING"
+					it.Fields[i].Value = value
+					found = true
+				}
+			}
+			if !found {
+				it.Fields = append(it.Fields, field{
+					ID: "description", Type: "STRING", Label: "Description", Value: value,
+				})
+			}
+		}
+		if title, ok := flags["--title"]; ok {
+			it.Title = title
+		}
+		if itemTags, ok := flags["--tags"]; ok {
+			it.Tags = splitTags(itemTags)
+		}
+		it.Version++
+		it.UpdatedAt = now()
+		return st.save()
 	case "document create":
 		if arg(pos, 2) != "-" {
 			return errors.New("expected '-' to read the document from stdin")

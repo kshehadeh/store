@@ -47,10 +47,11 @@ type Detail struct {
 
 // Document is content to create or replace as a native document item.
 type Document struct {
-	Title    string
-	FileName string
-	Tags     []string
-	Content  io.Reader
+	Title       string
+	FileName    string
+	Tags        []string
+	Description *string
+	Content     io.Reader
 }
 
 // Check is one line of a status report.

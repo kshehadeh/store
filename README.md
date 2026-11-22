@@ -115,14 +115,18 @@ enables simple line-based prompts for testing when stdin is not a terminal.
 
 | Command | What it does |
 |---|---|
-| `store keep PATH --name NAME [--tag T]...` | Store a file byte-for-byte, or a folder as a ZIP (dotfiles and empty directories included; symlinks and special files are refused). |
-| `store keep --text --name NAME [--tag T]...` | Store text from stdin (`pbpaste \| store keep --text --name token`) or from a hidden prompt. |
+| `store keep PATH --name NAME [--description TEXT] [--tag T]...` | Store a file byte-for-byte, or a folder as a ZIP (dotfiles and empty directories included; symlinks and special files are refused). |
+| `store keep --text --name NAME [--description TEXT] [--tag T]...` | Store text from stdin (`pbpaste \| store keep --text --name token`) or from a hidden prompt. |
 | `store list [--tag T]... [--json]` | List discoverable items with TYPE, HOST, and SOURCE columns read from their `store/meta/` tags; TAGS shows only your labels (all `meta/` tags are left out; use `--json` to see them). Never reads secret values. |
 | `store pull` | Choose from all discoverable items, most recently updated first. |
 | `store tui` | Browse stored items, view metadata, pull the selection, or rename it. |
 | `store pull NAME` | Pull by exact name. |
 | `store pull --tag T [--tag T]...` | Pull by tags; choose from a list when several match. |
 | `store pull --id ID` | Pull a specific item (use this in scripts when a query is ambiguous). |
+
+`--description` stores a custom text field named `Description` on the 1Password
+document. When updating an existing item, the field is changed only when this
+option is supplied.
 
 Pull options:
 
