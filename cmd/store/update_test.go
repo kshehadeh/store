@@ -110,8 +110,15 @@ func TestUpdateWhenCurrentAndForDevBuilds(t *testing.T) {
 	if out, code := runBinary(t, bin, env, "update"); code != 0 || !strings.Contains(out, "store v9.9.9 is up to date.") {
 		t.Fatalf("up-to-date update = %d\n%s", code, out)
 	}
-	if out, code := runBinary(t, storeBin, env, "update"); code == 0 || !strings.Contains(out, "is not a release") {
-		t.Fatalf("dev build update = %d\n%s", code, out)
+	// An explicit git-describe version keeps this independent of whether the
+	// checkout sits on a tag, which Go would otherwise stamp into the build.
+	devBin := filepath.Join(root, "dev", "store")
+	releaseBinary(t, devBin, "v0.4.0-3-gabcdef0")
+	if out, code := runBinary(t, devBin, env, "update"); code == 0 || !strings.Contains(out, "is not a release") {
+		t.Fatalf("non-release build update = %d\n%s", code, out)
+	}
+	if out, _ := runBinary(t, devBin, env, "--version"); !strings.Contains(out, "v0.4.0-3-gabcdef0") {
+		t.Fatalf("non-release build was replaced: %s", out)
 	}
 }
 
