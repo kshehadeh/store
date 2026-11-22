@@ -32,6 +32,7 @@ store --version
 Update or remove it later with:
 
 ```sh
+store update                              # runs the brew upgrade below for you
 brew upgrade --cask kshehadeh/tap/store
 brew uninstall --cask kshehadeh/tap/store
 ```
@@ -60,6 +61,8 @@ install -m 0755 store ~/.local/bin/store   # any directory on your PATH
 
 Use `darwin_amd64` for Intel Macs, or `linux_amd64`/`linux_arm64` on Linux
 (where `sha256sum -c --ignore-missing checksums.txt` also works).
+
+After that, `store update` installs newer releases in place.
 
 ### Build from source
 
@@ -126,6 +129,7 @@ enables simple line-based prompts for testing when stdin is not a terminal.
 | `store pull NAME` | Pull by exact name. |
 | `store pull --tag T [--tag T]...` | Pull by tags; choose from a list when several match. |
 | `store pull --id ID` | Pull a specific item (use this in scripts when a query is ambiguous). |
+| `store update [--check]` | Install the latest release, or only report whether one exists. |
 
 `--description` stores a custom text field named `Description` on the 1Password
 document. When updating an existing item, the field is changed only when this
@@ -148,6 +152,20 @@ Pull options:
   path recorded as the item's source. Downloads are staged next to the
   destination with private permissions and moved into place only when
   complete.
+
+### Updates
+
+`store update` checks the latest GitHub release. If it is newer, store
+downloads the archive for your platform, verifies it against the release's
+`checksums.txt`, and replaces the running binary in one step, so a failed
+update leaves the old binary in place. Homebrew installs are upgraded with
+`brew upgrade --cask kshehadeh/tap/store` instead. Builds that are not
+releases (for example `dev` builds from a checkout) cannot update themselves.
+
+Release builds also check GitHub at most once a day and print a one-line
+notice on stderr when a newer release exists. The check runs only when stderr
+is a terminal, never delays a command by more than a second, and never runs
+during `store update`. Set `STORE_NO_UPDATE_CHECK=1` to turn it off.
 
 ## Tags
 
@@ -216,6 +234,7 @@ internal/config/            Local provider and vault configuration
 internal/tags/              Discovery, labels, and metadata conventions
 internal/archive/           ZIP packing and safe extraction
 internal/restore/           Destination checks and staged publication
+internal/update/            Release lookup, verified self-update, update notice
 internal/testsupport/fakeop/ Simulated 1Password CLI for tests
 .github/workflows/ci.yml     macOS and Linux checks
 Taskfile.yml                Development and release commands

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -15,6 +16,7 @@ import (
 	"github.com/kshehadeh/store/internal/app"
 	"github.com/kshehadeh/store/internal/config"
 	"github.com/kshehadeh/store/internal/providers"
+	"github.com/kshehadeh/store/internal/update"
 )
 
 // errReported signals failure after the command has already explained it.
@@ -24,13 +26,59 @@ var errReported = errors.New("reported")
 func Execute() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if err := newRoot().ExecuteContext(ctx); err != nil {
+	root := newRoot()
+	notice := startUpdateNotice(ctx, root, os.Args[1:])
+	code := 0
+	if err := root.ExecuteContext(ctx); err != nil {
 		if !errors.Is(err, errReported) {
 			fmt.Fprintf(os.Stderr, "store: %v\n", err)
 		}
-		return 1
+		code = 1
 	}
-	return 0
+	printUpdateNotice(notice)
+	return code
+}
+
+// startUpdateNotice checks for a newer release in the background, only for
+// release builds whose stderr is a terminal, so scripts never see a notice.
+func startUpdateNotice(ctx context.Context, root *cobra.Command, args []string) <-chan string {
+	if os.Getenv("STORE_NO_UPDATE_CHECK") != "" || !term.IsTerminal(int(os.Stderr.Fd())) {
+		return nil
+	}
+	current := commandVersion()
+	if !update.IsRelease(current) {
+		return nil
+	}
+	if cmd, _, err := root.Find(args); err == nil && cmd.Name() == "update" {
+		return nil
+	}
+	statePath, err := update.StatePath()
+	if err != nil {
+		return nil
+	}
+	n := update.Notifier{Client: update.NewClient(), StatePath: statePath, Current: current}
+	ch := make(chan string, 1)
+	go func() {
+		checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		ch <- n.Notice(checkCtx)
+	}()
+	return ch
+}
+
+// printUpdateNotice waits briefly for a pending check so quick commands are
+// not held up by a slow network.
+func printUpdateNotice(notice <-chan string) {
+	if notice == nil {
+		return
+	}
+	select {
+	case msg := <-notice:
+		if msg != "" {
+			fmt.Fprintln(os.Stderr, msg)
+		}
+	case <-time.After(time.Second):
+	}
 }
 
 func newRoot() *cobra.Command {
@@ -51,7 +99,7 @@ func newRoot() *cobra.Command {
 		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newTUI())
+	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newTUI(), newUpdate())
 	return root
 }
 
