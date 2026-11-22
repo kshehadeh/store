@@ -41,8 +41,9 @@ type Field struct {
 // Detail is an item plus the metadata needed to retrieve its content.
 type Detail struct {
 	Item
-	FileName string
-	Fields   []Field
+	Description string
+	FileName    string
+	Fields      []Field
 }
 
 // Document is content to create or replace as a native document item.
@@ -75,6 +76,9 @@ type Provider interface {
 	UpdateDocument(ctx context.Context, id string, doc Document) error
 	// RenameItem changes an item's title without changing its other fields.
 	RenameItem(ctx context.Context, id, title string) error
+	// UpdateItemMetadata sets an item's description when non-nil and replaces
+	// its tags.
+	UpdateItemMetadata(ctx context.Context, id string, description *string, tags []string) error
 	// DownloadDocument writes a document's file to path with private
 	// permissions. path must not exist.
 	DownloadDocument(ctx context.Context, id, path string) error

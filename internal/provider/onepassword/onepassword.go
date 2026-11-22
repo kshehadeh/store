@@ -298,6 +298,9 @@ func (a *Adapter) GetItem(ctx context.Context, id string) (provider.Detail, erro
 		if f.ID == "" {
 			continue
 		}
+		if f.Label == "Description" && f.Type == "STRING" {
+			d.Description = f.Value
+		}
 		field := provider.Field{ID: f.ID, Label: f.Label, Type: strings.ToLower(f.Type)}
 		if f.Section != nil {
 			field.Section = f.Section.Label
@@ -372,6 +375,16 @@ func (a *Adapter) RenameItem(ctx context.Context, id, title string) error {
 	_, err := a.op(ctx, nil, "item", "edit", id,
 		"--vault", a.vault,
 		"--title", title)
+	return err
+}
+
+func (a *Adapter) UpdateItemMetadata(ctx context.Context, id string, description *string, itemTags []string) error {
+	args := []string{"item", "edit", id}
+	if description != nil {
+		args = append(args, "Description[text]="+*description)
+	}
+	args = append(args, "--vault", a.vault, "--tags", strings.Join(itemTags, ","))
+	_, err := a.op(ctx, nil, args...)
 	return err
 }
 

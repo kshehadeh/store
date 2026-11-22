@@ -23,6 +23,8 @@ const (
 	explorerQuit
 	explorerPull
 	explorerRename
+	explorerEdit
+	explorerSaveEdit
 )
 
 type storedItem struct {
@@ -56,6 +58,15 @@ type explorerModel struct {
 	action     explorerAction
 	actionItem provider.Item
 	done       bool
+
+	editing              bool
+	editItem             provider.Item
+	editDescriptionInput textinput.Model
+	editTagsInput        textinput.Model
+	editFocus            int
+	editError            string
+	editedDescription    string
+	editedTags           []string
 }
 
 var (
@@ -119,6 +130,14 @@ func newExplorerModel(location string, items []provider.Item, selectedID, query,
 func (m explorerModel) Init() tea.Cmd { return textinput.Blink }
 
 func (m explorerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.editing {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.resize(size.Width, size.Height)
+			return m, nil
+		}
+		return m.updateEdit(msg)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.resize(msg.Width, msg.Height)
@@ -127,6 +146,11 @@ func (m explorerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			m.finish(explorerQuit)
+			return m, tea.Quit
+		case "ctrl+e":
+			if !m.finish(explorerEdit) {
+				return m, nil
+			}
 			return m, tea.Quit
 		case "ctrl+r":
 			if !m.finish(explorerRename) {
@@ -183,6 +207,9 @@ func (m explorerModel) View() tea.View {
 
 	header, footer, bodyHeight := m.frameParts()
 	view.Content = lipgloss.JoinVertical(lipgloss.Left, header, m.panes(bodyHeight), footer)
+	if m.editing {
+		view.Content = overlayContent(view.Content, m.editModalView(), m.width, m.height)
+	}
 	return view
 }
 
@@ -194,14 +221,13 @@ func (m explorerModel) frameParts() (header, footer string, bodyHeight int) {
 		ansi.Truncate(m.filter.View(), width, ""),
 	)
 	status := strings.NewReplacer("\r", " ", "\n", " ").Replace(m.status)
-	if status == "" {
-		status = " "
+	footerLines := []string{
+		explorerHintStyle.Width(width).Render("↑↓ select  Enter pull  Ctrl+E edit  Ctrl+R rename  Esc clear/quit  Ctrl+C quit"),
 	}
-	footer = lipgloss.JoinVertical(
-		lipgloss.Left,
-		explorerHintStyle.Width(width).Render("↑↓ select  Enter pull  Ctrl+R rename  Esc clear/quit  Ctrl+C quit"),
-		lipgloss.NewStyle().Width(width).Render(ansi.Truncate(status, width, "…")),
-	)
+	if status != "" {
+		footerLines = append(footerLines, lipgloss.NewStyle().Width(width).Render(ansi.Truncate(status, width, "…")))
+	}
+	footer = lipgloss.JoinVertical(lipgloss.Left, footerLines...)
 	return header, footer, max(1, m.height-lipgloss.Height(header)-lipgloss.Height(footer))
 }
 
@@ -268,6 +294,9 @@ func (m *explorerModel) resize(width, height int) {
 		m.list.SetSize(max(1, leftWidth-2), max(1, bodyHeight-2))
 		m.details.SetWidth(max(1, rightWidth-2))
 		m.details.SetHeight(max(1, bodyHeight-2))
+		if m.editing {
+			m.resizeEdit()
+		}
 		return
 	}
 
@@ -276,6 +305,9 @@ func (m *explorerModel) resize(width, height int) {
 	m.list.SetSize(max(1, m.width-2), max(1, leftHeight-2))
 	m.details.SetWidth(max(1, m.width-2))
 	m.details.SetHeight(max(1, rightHeight-2))
+	if m.editing {
+		m.resizeEdit()
+	}
 }
 
 func (m explorerModel) panes(bodyHeight int) string {
@@ -319,15 +351,22 @@ func (a *App) TUI(ctx context.Context) error {
 	}
 
 	selectedID, query, status := "", "", ""
+	var pendingEditItem *provider.Item
+	pendingEditDescription := ""
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		result, err := a.Console.runTUI(newExplorerModel(a.Location, items, selectedID, query, status))
+		model := newExplorerModel(a.Location, items, selectedID, query, status)
+		if pendingEditItem != nil {
+			model.openEdit(*pendingEditItem, pendingEditDescription)
+			pendingEditItem = nil
+		}
+		result, err := a.Console.runTUI(model)
 		if err != nil {
 			return err
 		}
-		model := result.(explorerModel)
+		model = result.(explorerModel)
 		if model.action == explorerQuit || model.action == explorerNoAction {
 			return nil
 		}
@@ -358,6 +397,26 @@ func (a *App) TUI(ctx context.Context) error {
 			}
 			query = ""
 			status = fmt.Sprintf("Renamed %q.", strings.TrimSpace(title))
+		case explorerEdit:
+			detail, getErr := a.Provider.GetItem(ctx, model.actionItem.ID)
+			if getErr != nil {
+				status = getErr.Error()
+				continue
+			}
+			item := detail.Item
+			pendingEditItem = &item
+			pendingEditDescription = detail.Description
+		case explorerSaveEdit:
+			err = a.EditItem(ctx, model.actionItem.ID, model.editedDescription, model.editedTags)
+			if err != nil {
+				status = err.Error()
+				continue
+			}
+			items, err = a.discover(ctx, nil)
+			if err != nil {
+				return err
+			}
+			status = fmt.Sprintf("Updated %q.", model.actionItem.Title)
 		}
 	}
 }

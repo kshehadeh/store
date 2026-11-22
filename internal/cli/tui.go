@@ -15,7 +15,8 @@ func newTUI() *cobra.Command {
 		Long: `Browse stored items in a two-pane terminal interface.
 
 Type to filter items, use the arrow keys to move through the list, press Enter
-to pull the selected item, or Ctrl-R to rename it.`,
+to pull the selected item, Ctrl-E to edit its description and store tags, or
+Ctrl-R to rename it.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			a, err := openApp(app.NewConsole(os.Stdin, os.Stderr))

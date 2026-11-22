@@ -130,6 +130,60 @@ func TestRenameItem(t *testing.T) {
 	}
 }
 
+func TestGetItemReadsDescriptionField(t *testing.T) {
+	r := &recorder{out: map[string]string{"item get": `{
+		"id":"abc","title":"settings","category":"DOCUMENT",
+		"tags":["store/meta/managed/v1"],
+		"fields":[{"id":"field1","type":"STRING","label":"Description","value":"Local settings"}]
+	}`}}
+	a, err := New(r, map[string]string{"vault_id": "V1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := a.GetItem(context.Background(), "abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Description != "Local settings" {
+		t.Fatalf("Description = %q; want Local settings", detail.Description)
+	}
+	if slices.Contains(r.calls[0].args, "--reveal") {
+		t.Fatal("GetItem revealed concealed fields")
+	}
+}
+
+func TestUpdateItemMetadata(t *testing.T) {
+	r := &recorder{}
+	a, err := New(r, map[string]string{"vault_id": "V1", "account": "ACCT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	description := "Updated settings"
+	itemTags := []string{"store/meta/managed/v1", "store/environment/dev"}
+	if err := a.UpdateItemMetadata(context.Background(), "abc", &description, itemTags); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"item", "edit", "abc", "Description[text]=Updated settings",
+		"--vault", "V1", "--tags", "store/meta/managed/v1,store/environment/dev", "--account", "ACCT",
+	}
+	if !slices.Equal(r.calls[0].args, want) {
+		t.Fatalf("UpdateItemMetadata args = %q; want %q", r.calls[0].args, want)
+	}
+}
+
+func TestUpdateItemMetadataCanPreserveDescription(t *testing.T) {
+	r := &recorder{}
+	a, _ := New(r, map[string]string{"vault_id": "V1"})
+	if err := a.UpdateItemMetadata(context.Background(), "abc", nil, []string{"store/meta/managed/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"item", "edit", "abc", "--vault", "V1", "--tags", "store/meta/managed/v1"}
+	if !slices.Equal(r.calls[0].args, want) {
+		t.Fatalf("UpdateItemMetadata args = %q; want %q", r.calls[0].args, want)
+	}
+}
+
 func TestCleanMessage(t *testing.T) {
 	got := cleanMessage("[ERROR] 2026/01/02 03:04:05 account is not signed in\n")
 	if got != "account is not signed in" {

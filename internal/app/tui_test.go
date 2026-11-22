@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -115,6 +116,62 @@ func TestExplorerModelFiltersAndRunsActions(t *testing.T) {
 	}
 }
 
+func TestExplorerEditModalSavesDescriptionAndStoreTags(t *testing.T) {
+	item := provider.Item{
+		ID: "a", Title: "Alpha", Kind: provider.KindDocument,
+		Tags: []string{"store/meta/managed/v1", "store/meta/type/file", "store/team/api", "personal"},
+	}
+	m := newExplorerModel("vault", []provider.Item{item}, "a", "", "")
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	if got := next.(explorerModel); !got.done || got.action != explorerEdit || got.actionItem.ID != "a" {
+		t.Fatalf("edit request = %+v", got)
+	}
+
+	m = newExplorerModel("vault", []provider.Item{item}, "a", "", "")
+	m.openEdit(item, "Local API settings")
+	view := ansi.Strip(m.View().Content)
+	for _, want := range []string{"Edit selected item", "Local API settings", "team/api", "Store tags"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("edit modal is missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "personal") || strings.Contains(view, "meta/") {
+		t.Fatalf("modal exposed non-store or automatic tags:\n%s", view)
+	}
+
+	m.editDescriptionInput.SetValue("Updated API settings")
+	m.editTagsInput.SetValue("project/api, team/web")
+	next, _ = m.Update(key(tea.KeyEnter))
+	saved := next.(explorerModel)
+	if !saved.done || saved.action != explorerSaveEdit || saved.actionItem.ID != "a" {
+		t.Fatalf("save action = %+v", saved)
+	}
+	if saved.editedDescription != "Updated API settings" {
+		t.Errorf("description = %q", saved.editedDescription)
+	}
+	if !slices.Equal(saved.editedTags, []string{"store/project/api", "store/team/web"}) {
+		t.Errorf("tags = %v", saved.editedTags)
+	}
+}
+
+func TestExplorerEditModalValidatesTagsAndCanCancel(t *testing.T) {
+	item := provider.Item{ID: "a", Title: "Alpha", Tags: []string{"store/meta/managed/v1", "store/team/api"}}
+	m := newExplorerModel("vault", []provider.Item{item}, "a", "", "")
+	m.openEdit(item, "")
+	m.editTagsInput.SetValue("meta/host/laptop")
+	next, _ := m.Update(key(tea.KeyEnter))
+	m = next.(explorerModel)
+	if !m.editing || m.done || m.editError == "" {
+		t.Fatalf("reserved tag was accepted: %+v", m)
+	}
+
+	next, _ = m.Update(key(tea.KeyEscape))
+	m = next.(explorerModel)
+	if m.editing || m.done || m.action != explorerNoAction {
+		t.Fatalf("Escape did not return to the browser: %+v", m)
+	}
+}
+
 func TestExplorerKeepsSelectionOnNonInputMessages(t *testing.T) {
 	items := []provider.Item{{ID: "a", Title: "Alpha"}, {ID: "b", Title: "Beta"}}
 	m := newExplorerModel("vault", items, "", "", "")
@@ -151,16 +208,47 @@ func TestExplorerNeedsSelectionForItemActions(t *testing.T) {
 	if got := next.(explorerModel); got.done {
 		t.Fatal("rename exited the browser with no selected item")
 	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
+	if got := next.(explorerModel); got.done {
+		t.Fatal("edit exited the browser with no selected item")
+	}
 
 	for _, size := range [][2]int{{120, 40}, {100, 28}, {80, 24}, {60, 18}, {40, 12}} {
 		next, _ := m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		m = next.(explorerModel)
 		view := m.View().Content
-		if !strings.Contains(view, "store tui") || !strings.Contains(view, "Ctrl+R") || !strings.Contains(view, "rename") {
+		if !strings.Contains(view, "store tui") || !strings.Contains(view, "Ctrl+R") || !strings.Contains(view, "rename") || !strings.Contains(view, "Ctrl+E") || !strings.Contains(view, "edit") {
 			t.Fatalf("browser view at %dx%d is incomplete:\n%s", size[0], size[1], view)
 		}
 		if w, h := lipgloss.Width(view), lipgloss.Height(view); w > size[0] || h > size[1] {
 			t.Fatalf("browser frame is %dx%d, outside terminal %dx%d", w, h, size[0], size[1])
+		}
+	}
+}
+
+func TestExplorerEditModalFitsTerminalSizes(t *testing.T) {
+	item := provider.Item{ID: "a", Title: "Alpha", Tags: []string{"store/team/api"}}
+	m := newExplorerModel("vault", []provider.Item{item}, "a", "", "")
+	m.openEdit(item, "A long description that must scroll horizontally in a narrow terminal")
+	m.editTagsInput.SetValue("project/api, team/web, environment/staging, owner/platform")
+	for _, withError := range []bool{false, true} {
+		m.editError = ""
+		if withError {
+			m.editError = "tag \"meta/host\" is reserved: tags under store/meta/ are set automatically"
+		}
+		for _, size := range [][2]int{{120, 40}, {80, 24}, {60, 18}, {40, 12}} {
+			next, _ := m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+			m = next.(explorerModel)
+			if view := m.View().Content; lipgloss.Width(view) > size[0] || lipgloss.Height(view) > size[1] {
+				t.Fatalf("edit modal at %dx%d overflows terminal:\n%s", size[0], size[1], view)
+			}
+			modal := m.editModalView()
+			if lipgloss.Height(modal) > size[1] || lipgloss.Width(modal) > size[0] {
+				t.Fatalf("edit modal at %dx%d (error=%v) is %dx%d:\n%s", size[0], size[1], withError, lipgloss.Width(modal), lipgloss.Height(modal), modal)
+			}
+			if !strings.Contains(ansi.Strip(modal), "╰") {
+				t.Fatalf("edit modal at %dx%d lost its bottom border:\n%s", size[0], size[1], modal)
+			}
 		}
 	}
 }
