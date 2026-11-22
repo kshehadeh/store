@@ -96,7 +96,8 @@ Bubbles' searchable list. Move with the arrow keys, press `/` to filter, and
 press Enter to confirm a filter, then Enter again to select. Esc clears a
 filter or cancels; Ctrl-C cancels at any time.
 
-`store tui` opens a two-pane browser for all stored items. Type at the top to
+`store tui` (or `store` with no command) opens a two-pane browser for all
+stored items. Type at the top to
 filter; the right pane shows item metadata without reading secret values. Use
 Enter to pull the selection, Ctrl-E to edit its description and store tags, or
 Ctrl-R to rename it. The Edit modal changes store tags only; automatic metadata
@@ -121,7 +122,7 @@ enables simple line-based prompts for testing when stdin is not a terminal.
 | `store keep --text --name NAME [--description TEXT] [--tag T]...` | Store text from stdin (`pbpaste \| store keep --text --name token`) or from a hidden prompt. |
 | `store list [--tag T]... [--json]` | List discoverable items with TYPE, HOST, and SOURCE columns read from their `store/meta/` tags; TAGS shows only your labels (all `meta/` tags are left out; use `--json` to see them). Never reads secret values. |
 | `store pull` | Choose from all discoverable items, most recently updated first. |
-| `store tui` | Browse stored items, view metadata, pull the selection, edit its description and tags, or rename it. |
+| `store`, `store tui` | Browse stored items, view metadata, pull the selection, edit its description and tags, or rename it. |
 | `store pull NAME` | Pull by exact name. |
 | `store pull --tag T [--tag T]...` | Pull by tags; choose from a list when several match. |
 | `store pull --id ID` | Pull a specific item (use this in scripts when a query is ambiguous). |

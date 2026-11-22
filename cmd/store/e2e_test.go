@@ -424,6 +424,17 @@ func TestKeepAndPullFile(t *testing.T) {
 	}
 }
 
+func TestBareStoreWithoutTerminalPrintsHelp(t *testing.T) {
+	_, a, _ := twoMachines(t)
+	r := a.ok(opts{})
+	if !strings.Contains(r.stdout, "Usage:") || !strings.Contains(r.stdout, "tui") {
+		t.Fatalf("bare store without a terminal did not print help:\n%s", r.stdout)
+	}
+	if r := a.run(opts{}, "bogus"); r.code == 0 || !strings.Contains(r.stderr, `unknown command "bogus"`) {
+		t.Fatalf("unknown command = %d\nstderr: %s", r.code, r.stderr)
+	}
+}
+
 func TestKeepDescription(t *testing.T) {
 	w, a, _ := twoMachines(t)
 	path := filepath.Join(a.home, "settings.json")

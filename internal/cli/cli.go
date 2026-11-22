@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/kshehadeh/store/internal/app"
 	"github.com/kshehadeh/store/internal/config"
@@ -39,6 +40,15 @@ func newRoot() *cobra.Command {
 		Short:         "Keep files, folders, and text in a secure vault and pull them on other computers",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Piped or redirected runs keep printing help so scripts don't
+			// block on, or fail in, the interactive browser.
+			if !term.IsTerminal(int(os.Stdin.Fd())) {
+				return cmd.Help()
+			}
+			return runTUI(cmd, args)
+		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newTUI())

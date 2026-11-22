@@ -26,7 +26,7 @@ func TestTUICommandIsRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmd.Use != "tui" || !strings.Contains(cmd.Long, "Ctrl-R to rename") {
+	if cmd.Use != "tui" || !strings.Contains(cmd.Long, "Ctrl-R to rename") || !strings.Contains(cmd.Long, "no\ncommand also opens") {
 		t.Fatalf("tui command = %q, %q", cmd.Use, cmd.Long)
 	}
 }
