@@ -72,6 +72,8 @@ type Provider interface {
 	// UpdateDocument replaces the content, file name, title, and tags of a
 	// document item in a single operation.
 	UpdateDocument(ctx context.Context, id string, doc Document) error
+	// RenameItem changes an item's title without changing its other fields.
+	RenameItem(ctx context.Context, id, title string) error
 	// DownloadDocument writes a document's file to path with private
 	// permissions. path must not exist.
 	DownloadDocument(ctx context.Context, id, path string) error

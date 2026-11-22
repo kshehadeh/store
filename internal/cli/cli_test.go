@@ -21,6 +21,16 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+func TestTUICommandIsRegistered(t *testing.T) {
+	cmd, _, err := newRoot().Find([]string{"tui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cmd.Use != "tui" || !strings.Contains(cmd.Long, "Ctrl-R to rename") {
+		t.Fatalf("tui command = %q, %q", cmd.Use, cmd.Long)
+	}
+}
+
 func TestResolveVersion(t *testing.T) {
 	for _, tc := range []struct {
 		override string

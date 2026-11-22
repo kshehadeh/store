@@ -41,7 +41,7 @@ func newRoot() *cobra.Command {
 		SilenceErrors: true,
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull())
+	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newTUI())
 	return root
 }
 

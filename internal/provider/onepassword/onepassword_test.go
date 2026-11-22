@@ -70,6 +70,21 @@ func TestListMapsCategories(t *testing.T) {
 	}
 }
 
+func TestRenameItem(t *testing.T) {
+	r := &recorder{}
+	a, err := New(r, map[string]string{"vault_id": "V1", "account": "ACCT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.RenameItem(context.Background(), "item-id", "new title"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"item", "edit", "item-id", "--vault", "V1", "--title", "new title", "--account", "ACCT"}
+	if !slices.Equal(r.calls[0].args, want) {
+		t.Fatalf("RenameItem args = %q; want %q", r.calls[0].args, want)
+	}
+}
+
 func TestCleanMessage(t *testing.T) {
 	got := cleanMessage("[ERROR] 2026/01/02 03:04:05 account is not signed in\n")
 	if got != "account is not signed in" {

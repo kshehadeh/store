@@ -29,6 +29,10 @@ func (i choiceItem) Title() string       { return fmt.Sprintf("%d) %s", i.index+
 func (i choiceItem) Description() string { return "" }
 func (i choiceItem) FilterValue() string { return i.label }
 
+func choiceListHeight(itemCount int) int {
+	return min(itemCount+7, 20)
+}
+
 type choiceModel struct {
 	list      list.Model
 	selected  int
@@ -43,7 +47,8 @@ func newChoiceModel(prompt string, options []string) choiceModel {
 	}
 	delegate := list.NewDefaultDelegate()
 	delegate.ShowDescription = false
-	l := list.New(items, delegate, 80, min(len(items)*2+7, 20))
+	delegate.SetSpacing(0)
+	l := list.New(items, delegate, 80, choiceListHeight(len(items)))
 	l.Title = prompt
 	l.SetShowStatusBar(false)
 	l.DisableQuitKeybindings()
@@ -55,7 +60,7 @@ func (m choiceModel) Init() tea.Cmd { return nil }
 func (m choiceModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.list.SetSize(max(1, msg.Width-2), max(1, min(msg.Height-2, len(m.list.Items())*2+7, 20)))
+		m.list.SetSize(max(1, msg.Width-2), max(1, min(msg.Height-2, choiceListHeight(len(m.list.Items())))))
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c":

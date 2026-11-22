@@ -339,6 +339,13 @@ func (a *Adapter) UpdateDocument(ctx context.Context, id string, doc provider.Do
 	return err
 }
 
+func (a *Adapter) RenameItem(ctx context.Context, id, title string) error {
+	_, err := a.op(ctx, nil, "item", "edit", id,
+		"--vault", a.vault,
+		"--title", title)
+	return err
+}
+
 func (a *Adapter) DownloadDocument(ctx context.Context, id, path string) error {
 	_, err := a.op(ctx, nil, "document", "get", id,
 		"--vault", a.vault,
