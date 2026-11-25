@@ -21,7 +21,7 @@ meta/host/laptop.`,
 		Example: "  store list\n  store list --tag project/api --tag meta/type/file",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			a, err := openApp(app.NewConsole(os.Stdin, os.Stderr))
+			a, err := openApp(cmd, app.NewConsole(os.Stdin, os.Stderr))
 			if err != nil {
 				return err
 			}

@@ -37,7 +37,7 @@ its labels are kept. store refuses to touch an item it did not create.`,
 			if len(args) == 1 {
 				o.Path = args[0]
 			}
-			a, err := openApp(app.NewConsole(os.Stdin, os.Stderr))
+			a, err := openApp(cmd, app.NewConsole(os.Stdin, os.Stderr))
 			if err != nil {
 				return err
 			}

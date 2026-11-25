@@ -99,7 +99,8 @@ func newRoot() *cobra.Command {
 		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newTUI(), newUpdate())
+	root.PersistentFlags().StringP("connection", "c", "", "connection to use instead of the default (see `store connection list`)")
+	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newTUI(), newUpdate(), newConnection())
 	return root
 }
 
@@ -111,7 +112,8 @@ func hostname() string {
 	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(h)), ".local")
 }
 
-func openApp(console *app.Console) (*app.App, error) {
+func openApp(cmd *cobra.Command, console *app.Console) (*app.App, error) {
+	name, _ := cmd.Flags().GetString("connection")
 	path, err := config.Path()
 	if err != nil {
 		return nil, err
@@ -120,17 +122,25 @@ func openApp(console *app.Console) (*app.App, error) {
 	if err != nil {
 		return nil, err
 	}
-	def, ok := providers.Lookup(cfg.Provider)
-	if !ok {
-		return nil, fmt.Errorf("unknown provider %q in %s; run `store setup`", cfg.Provider, path)
-	}
-	p, err := def.Open(cfg.Settings)
+	id, conn, err := cfg.Select(name)
 	if err != nil {
 		return nil, err
 	}
+	def, ok := providers.Lookup(conn.Provider)
+	if !ok {
+		return nil, fmt.Errorf("unknown provider %q in %s; run `store connection add`", conn.Provider, path)
+	}
+	p, err := def.Open(conn.Settings)
+	if err != nil {
+		return nil, err
+	}
+	location := def.Describe(conn.Settings)
+	if len(cfg.Connections) > 1 {
+		location = fmt.Sprintf("%s: %s", id, location)
+	}
 	return &app.App{
 		Provider: p,
-		Location: def.Describe(cfg.Settings),
+		Location: location,
 		Console:  console,
 		Stdout:   os.Stdout,
 		Hostname: hostname(),

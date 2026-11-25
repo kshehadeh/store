@@ -85,12 +85,33 @@ Next, [set up each computer](#set-up-each-computer).
 2. Run `store setup` and choose the account and vault. **Choose the same vault
    on every computer.** You can also pass choices directly:
    `store setup --vault Shared --account my.1password.com`.
+   Each run adds one named connection; run it again to add another account or
+   vault, and manage them with `store connection` (see below).
 3. Run `store status` to check configuration, sign-in, and vault access.
    It never writes to the vault and exits nonzero if something is wrong.
 
 Setup saves only identifiers (provider, account, vault) to
 `~/.config/store/config.json` (or `$XDG_CONFIG_HOME/store/config.json`;
 override with `STORE_CONFIG`). No passwords or tokens are stored.
+
+### Multiple connections
+
+A computer can keep several connections, for example two 1Password accounts
+or different providers. `store connection add` (or `store setup` again) adds
+one, `--as work` gives it a short id, and the first one added becomes the
+default. Every command accepts `--connection` (`-c`) to use a non-default
+connection for that run.
+
+| Command | What it does |
+|---|---|
+| `store connection add [--as ID] [--provider P] [--account A] [--vault V]` | Add a connection; the first becomes the default. |
+| `store connection list` | Show every connection, marking the default. |
+| `store connection default ID` | Make a connection the default. |
+| `store connection remove ID` | Remove a connection; the next one becomes the default. |
+
+An existing single-vault `config.json` from an older `store` keeps working:
+it is treated as one connection named `default` and rewritten in the new
+format the next time connections change.
 
 ### Terminal controls
 
@@ -113,8 +134,8 @@ Destination and hidden-text prompts use Bubbles' text input. Enter confirms
 Hidden text is never echoed, including its length. All interactive UI goes
 to stderr so pulled content on stdout stays unchanged.
 
-Scripts should use explicit flags such as `--vault`, `--id`, `--field`, and
-`--to`. Piped text still works without a terminal. `STORE_INTERACTIVE=1`
+Scripts should use explicit flags such as `--vault`, `--id`, `--field`,
+`--to`, and `--connection`. Piped text still works without a terminal. `STORE_INTERACTIVE=1`
 enables simple line-based prompts for testing when stdin is not a terminal.
 
 ## Commands
@@ -130,6 +151,9 @@ enables simple line-based prompts for testing when stdin is not a terminal.
 | `store pull --tag T [--tag T]...` | Pull by tags; choose from a list when several match. |
 | `store pull --id ID` | Pull a specific item (use this in scripts when a query is ambiguous). |
 | `store update [--check]` | Install the latest release, or only report whether one exists. |
+
+All commands that talk to a vault accept `--connection ID` (`-c ID`) to use a
+connection other than the default, e.g. `store pull root-env -c work`.
 
 `--description` stores a custom text field named `Description` on the 1Password
 document. When updating an existing item, the field is changed only when this

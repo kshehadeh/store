@@ -41,17 +41,26 @@ func newStatus() *cobra.Command {
 			}
 			cfg, err := config.Load(path)
 			if err != nil {
-				return fail(provider.Check{Name: "Configuration", Detail: err.Error(), Fix: "run `store setup`"})
+				return fail(provider.Check{Name: "Configuration", Detail: err.Error(), Fix: "run `store connection add`"})
 			}
-			def, ok := providers.Lookup(cfg.Provider)
-			if !ok {
-				return fail(provider.Check{Name: "Configuration", Detail: fmt.Sprintf("unknown provider %q in %s", cfg.Provider, path), Fix: "run `store setup`"})
-			}
-			p, err := def.Open(cfg.Settings)
+			name, _ := cmd.Flags().GetString("connection")
+			id, conn, err := cfg.Select(name)
 			if err != nil {
-				return fail(provider.Check{Name: "Configuration", Detail: err.Error(), Fix: "run `store setup`"})
+				return fail(provider.Check{Name: "Configuration", Detail: err.Error()})
 			}
-			report(out, provider.Check{Name: "Configuration", OK: true, Detail: fmt.Sprintf("%s (%s)", def.Describe(cfg.Settings), path)})
+			def, ok := providers.Lookup(conn.Provider)
+			if !ok {
+				return fail(provider.Check{Name: "Configuration", Detail: fmt.Sprintf("unknown provider %q in %s", conn.Provider, path), Fix: "run `store connection add`"})
+			}
+			p, err := def.Open(conn.Settings)
+			if err != nil {
+				return fail(provider.Check{Name: "Configuration", Detail: err.Error(), Fix: "run `store connection add`"})
+			}
+			detail := fmt.Sprintf("%s (%s)", def.Describe(conn.Settings), path)
+			if len(cfg.Connections) > 1 {
+				detail = fmt.Sprintf("connection %q: %s", id, detail)
+			}
+			report(out, provider.Check{Name: "Configuration", OK: true, Detail: detail})
 			ok = true
 			for _, c := range p.Status(cmd.Context()) {
 				report(out, c)

@@ -296,11 +296,16 @@ func TestSetupAndStatus(t *testing.T) {
 		t.Fatalf("config mode: %v %v", info, err)
 	}
 	var cfg struct {
-		Provider string            `json:"provider"`
-		Settings map[string]string `json:"settings"`
+		Version     int    `json:"version"`
+		Default     string `json:"default"`
+		Connections map[string]struct {
+			Provider string            `json:"provider"`
+			Settings map[string]string `json:"settings"`
+		} `json:"connections"`
 	}
 	json.Unmarshal([]byte(readFile(t, a.config)), &cfg)
-	if cfg.Provider != "1password" || cfg.Settings["vault_id"] != "vshared" || cfg.Settings["account"] != "ACCT1" {
+	conn, ok := cfg.Connections[cfg.Default]
+	if cfg.Version != 2 || !ok || conn.Provider != "1password" || conn.Settings["vault_id"] != "vshared" || conn.Settings["account"] != "ACCT1" {
 		t.Fatalf("config = %+v", cfg)
 	}
 
@@ -327,6 +332,65 @@ func TestSetupAndStatus(t *testing.T) {
 	}
 }
 
+func TestMultipleConnections(t *testing.T) {
+	w := newWorld(t)
+	a := w.machine("laptop", "laptop")
+
+	// First connection (Private vault) becomes the default automatically.
+	r := a.ok(opts{}, "connection", "add", "--vault", "Private", "--as", "personal")
+	if !strings.Contains(r.stdout, `Saved connection "personal"`) {
+		t.Fatalf("add output: %s", r.stdout)
+	}
+	// Second connection (Shared vault) does not take over the default.
+	r = a.ok(opts{}, "setup", "--vault", "Shared", "--as", "work")
+	if !strings.Contains(r.stdout, `Saved connection "work"`) || !strings.Contains(r.stdout, `default connection is "personal"`) {
+		t.Fatalf("second add output: %s", r.stdout)
+	}
+	a.fails("already exists", opts{}, "connection", "add", "--vault", "Shared", "--as", "work")
+
+	r = a.ok(opts{}, "connection", "list")
+	for _, want := range []string{"personal", "work", `vault "Private"`, `vault "Shared"`} {
+		if !strings.Contains(r.stdout, want) {
+			t.Errorf("connection list missing %q:\n%s", want, r.stdout)
+		}
+	}
+
+	// keep and pull through the default (personal) connection.
+	write(t, filepath.Join(a.home, "note.txt"), "personal secret\n", 0o600)
+	a.ok(opts{}, "keep", "note.txt", "--name", "note")
+	if got := w.one("note").Vault; got != "vprivate" {
+		t.Fatalf("default keep went to vault %q", got)
+	}
+	a.ok(opts{}, "pull", "note", "--to", "pulled.txt")
+	if got := readFile(t, filepath.Join(a.home, "pulled.txt")); got != "personal secret\n" {
+		t.Fatalf("default pull = %q", got)
+	}
+
+	// The same name through --connection work is a different vault.
+	r = a.ok(opts{}, "keep", "-c", "work", "note.txt", "--name", "note")
+	if !strings.Contains(r.stdout, `work: 1Password vault "Shared"`) {
+		t.Fatalf("keep -c output: %s", r.stdout)
+	}
+	if got := w.byTitle("note"); len(got) != 2 {
+		t.Fatalf("expected one note per vault, got %d", len(got))
+	}
+	a.fails("unknown connection", opts{}, "list", "--connection", "nope")
+
+	// Switch the default and remove the old one.
+	r = a.ok(opts{}, "connection", "default", "work")
+	if !strings.Contains(r.stdout, `Default connection is now "work"`) {
+		t.Fatalf("default output: %s", r.stdout)
+	}
+	r = a.ok(opts{}, "connection", "remove", "personal")
+	if !strings.Contains(r.stdout, `Removed connection "personal"`) {
+		t.Fatalf("remove output: %s", r.stdout)
+	}
+	r = a.ok(opts{}, "status")
+	if !strings.Contains(r.stdout, `can read vault "Shared"`) {
+		t.Fatalf("status after remove:\n%s", r.stdout)
+	}
+	a.fails("unknown connection", opts{}, "connection", "default", "personal")
+}
 func TestKeepAndPullFile(t *testing.T) {
 	w, a, b := twoMachines(t)
 	envPath := filepath.Join(a.home, ".env")

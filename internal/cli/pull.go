@@ -34,7 +34,7 @@ not running in a terminal, specify a name, tags, or --id instead.`,
 			if len(args) == 1 {
 				o.Name = args[0]
 			}
-			a, err := openApp(app.NewConsole(os.Stdin, os.Stderr))
+			a, err := openApp(cmd, app.NewConsole(os.Stdin, os.Stderr))
 			if err != nil {
 				return err
 			}
