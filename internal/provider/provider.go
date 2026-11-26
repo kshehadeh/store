@@ -4,9 +4,14 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 )
+
+// ErrCreatedWithoutID means a document was created, but its ID was unavailable
+// for a follow-up operation.
+var ErrCreatedWithoutID = errors.New("document was created, but no item ID was returned to set its description")
 
 // Kind describes how an item's content can be retrieved.
 type Kind string
@@ -70,6 +75,7 @@ type Provider interface {
 	// ListItems returns metadata for every item in the vault.
 	ListItems(ctx context.Context) ([]Item, error)
 	GetItem(ctx context.Context, id string) (Detail, error)
+	// CreateDocument returns the new ID even if a follow-up operation fails.
 	CreateDocument(ctx context.Context, doc Document) (string, error)
 	// UpdateDocument replaces the content, file name, title, and tags of a
 	// document item in a single operation.

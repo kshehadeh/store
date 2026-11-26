@@ -25,6 +25,7 @@ const (
 	explorerRename
 	explorerEdit
 	explorerSaveEdit
+	explorerCreate
 )
 
 type storedItem struct {
@@ -61,12 +62,15 @@ type explorerModel struct {
 
 	editing              bool
 	editItem             provider.Item
+	editNameInput        textinput.Model
 	editDescriptionInput textinput.Model
 	editTagsInput        textinput.Model
 	editFocus            int
 	editError            string
 	editedDescription    string
 	editedTags           []string
+
+	add addFlow
 }
 
 var (
@@ -137,6 +141,13 @@ func (m explorerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.updateEdit(msg)
 	}
+	if m.add.step != addInactive {
+		if size, ok := msg.(tea.WindowSizeMsg); ok {
+			m.resize(size.Width, size.Height)
+			return m, nil
+		}
+		return m.updateAdd(msg)
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -147,6 +158,9 @@ func (m explorerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			m.finish(explorerQuit)
 			return m, tea.Quit
+		case "ctrl+n":
+			m.openAdd()
+			return m, nil
 		case "ctrl+e":
 			if !m.finish(explorerEdit) {
 				return m, nil
@@ -209,6 +223,8 @@ func (m explorerModel) View() tea.View {
 	view.Content = lipgloss.JoinVertical(lipgloss.Left, header, m.panes(bodyHeight), footer)
 	if m.editing {
 		view.Content = overlayContent(view.Content, m.editModalView(), m.width, m.height)
+	} else if m.add.step != addInactive {
+		view.Content = overlayContent(view.Content, m.addModalView(), m.width, m.height)
 	}
 	return view
 }
@@ -220,9 +236,9 @@ func (m explorerModel) frameParts() (header, footer string, bodyHeight int) {
 		explorerHeaderStyle.Width(width).Render(ansi.Truncate("store tui  •  "+m.location, width, "…")),
 		ansi.Truncate(m.filter.View(), width, ""),
 	)
-	status := strings.NewReplacer("\r", " ", "\n", " ").Replace(m.status)
+	status := singleLine(m.status)
 	footerLines := []string{
-		explorerHintStyle.Width(width).Render("↑↓ select  Enter pull  Ctrl+E edit  Ctrl+R rename  Esc clear/quit  Ctrl+C quit"),
+		explorerHintStyle.Width(width).Render("↑↓ select  Enter pull  Ctrl+N add  Ctrl+E edit  Ctrl+R rename  Esc clear/quit"),
 	}
 	if status != "" {
 		footerLines = append(footerLines, lipgloss.NewStyle().Width(width).Render(ansi.Truncate(status, width, "…")))
@@ -278,6 +294,10 @@ func (m *explorerModel) syncDetails() {
 	m.details.GotoTop()
 }
 
+func singleLine(s string) string {
+	return strings.NewReplacer("\r", " ", "\n", " ").Replace(s)
+}
+
 func detailRow(label, value string) string {
 	return explorerDetailLabel.Render(label+": ") + value
 }
@@ -286,6 +306,7 @@ func (m *explorerModel) resize(width, height int) {
 	m.width = max(1, width)
 	m.height = max(1, height)
 	m.filter.SetWidth(max(1, m.width-lipgloss.Width(m.filter.Prompt)-1))
+	m.resizeAdd()
 
 	_, _, bodyHeight := m.frameParts()
 	if m.width >= 76 {
@@ -353,6 +374,7 @@ func (a *App) TUI(ctx context.Context) error {
 	selectedID, query, status := "", "", ""
 	var pendingEditItem *provider.Item
 	pendingEditDescription := ""
+	var resume *explorerModel
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -361,6 +383,9 @@ func (a *App) TUI(ctx context.Context) error {
 		if pendingEditItem != nil {
 			model.openEdit(*pendingEditItem, pendingEditDescription)
 			pendingEditItem = nil
+		}
+		if resume != nil {
+			model, resume = *resume, nil
 		}
 		result, err := a.Console.runTUI(model)
 		if err != nil {
@@ -409,7 +434,8 @@ func (a *App) TUI(ctx context.Context) error {
 		case explorerSaveEdit:
 			err = a.EditItem(ctx, model.actionItem.ID, model.editedDescription, model.editedTags)
 			if err != nil {
-				status = err.Error()
+				model.resumeEdit(err)
+				resume = &model
 				continue
 			}
 			items, err = a.discover(ctx, nil)
@@ -417,6 +443,29 @@ func (a *App) TUI(ctx context.Context) error {
 				return err
 			}
 			status = fmt.Sprintf("Updated %q.", model.actionItem.Title)
+		case explorerCreate:
+			result, keepErr := a.keep(ctx, model.addKeepOptions())
+			if keepErr != nil && !result.created {
+				// Reopen the same modal so nothing has to be entered again.
+				model.resumeEdit(keepErr)
+				resume = &model
+				continue
+			}
+			items, err = a.discover(ctx, nil)
+			if err != nil {
+				return err
+			}
+			selectedID, query = result.id, ""
+			if keepErr != nil {
+				status = keepErr.Error()
+				if result.id != "" {
+					edit := newExplorerModel(a.Location, items, selectedID, query, status)
+					edit.editCreatedItem(result, model.editedDescription, model.editedTags, keepErr)
+					resume = &edit
+				}
+				continue
+			}
+			status = fmt.Sprintf("Added %q (%s, %s).", result.name, result.kind, humanSize(result.size))
 		}
 	}
 }

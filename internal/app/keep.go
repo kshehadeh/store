@@ -20,11 +20,23 @@ import (
 )
 
 type KeepOptions struct {
-	Path        string
-	Text        bool
+	Path string
+	Text bool
+	// TextContent is the text to keep. When nil, text is read from the console.
+	TextContent *string
 	Name        string
 	Tags        []string
 	Description *string
+	// New refuses to keep over an existing item with the same name.
+	New bool
+}
+
+type keepResult struct {
+	id      string
+	name    string
+	kind    string
+	size    int64
+	created bool
 }
 
 type payload struct {
@@ -39,49 +51,83 @@ type payload struct {
 // Keep creates a document for name, or replaces the content of the document
 // store created for it earlier.
 func (a *App) Keep(ctx context.Context, o KeepOptions) error {
+	r, err := a.keep(ctx, o)
+	if err != nil {
+		return err
+	}
+	verb := "Updated"
+	if r.created {
+		verb = "Created"
+	}
+	fmt.Fprintf(a.Stdout, "%s %q (%s, %s) in %s\n", verb, r.name, r.kind, humanSize(r.size), a.Location)
+	return nil
+}
+
+func (a *App) keep(ctx context.Context, o KeepOptions) (keepResult, error) {
+	fail := func(err error) (keepResult, error) { return keepResult{}, err }
 	name := strings.TrimSpace(o.Name)
 	if name == "" {
-		return errors.New("--name is required")
+		return fail(errors.New("--name is required"))
 	}
 	if strings.ContainsAny(name, "\r\n") {
-		return errors.New("--name cannot contain line breaks")
+		return fail(errors.New("--name cannot contain line breaks"))
 	}
 	if o.Text && o.Path != "" {
-		return errors.New("provide either a PATH or --text, not both")
+		return fail(errors.New("provide either a PATH or --text, not both"))
 	}
 	if !o.Text && o.Path == "" {
-		return errors.New("provide a PATH to keep, or --text to keep text from stdin")
+		return fail(errors.New("provide a PATH to keep, or --text to keep text from stdin"))
 	}
 	userTags, err := tags.NormalizeAll(o.Tags, true)
 	if err != nil {
-		return err
+		return fail(err)
 	}
 
 	p, err := a.preparePayload(o, name)
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	defer p.cleanup()
 
-	existing, err := a.findForKeep(ctx, name)
-	if err != nil {
-		return err
+	var existing *provider.Item
+	if o.New {
+		err = a.requireUnusedName(ctx, name)
+	} else {
+		existing, err = a.findForKeep(ctx, name)
 	}
+	if err != nil {
+		return fail(err)
+	}
+	result := keepResult{name: name, kind: p.kind, size: p.size, created: existing == nil}
 	meta := a.metaTags(p.kind, p.sourceDir)
 	doc := provider.Document{Title: name, FileName: p.fileName, Content: p.content, Description: o.Description}
 	if existing == nil {
 		doc.Tags = tags.Merge(nil, userTags, meta)
-		if _, err := a.Provider.CreateDocument(ctx, doc); err != nil {
-			return err
+		if result.id, err = a.Provider.CreateDocument(ctx, doc); err != nil {
+			result.created = result.id != "" || errors.Is(err, provider.ErrCreatedWithoutID)
+			return result, err
 		}
-		fmt.Fprintf(a.Stdout, "Created %q (%s, %s) in %s\n", name, p.kind, humanSize(p.size), a.Location)
-		return nil
+		return result, nil
 	}
 	doc.Tags = tags.Merge(existing.Tags, userTags, meta)
 	if err := a.Provider.UpdateDocument(ctx, existing.ID, doc); err != nil {
+		return fail(err)
+	}
+	result.id = existing.ID
+	return result, nil
+}
+
+// requireUnusedName returns an error if any item in the vault is titled name.
+func (a *App) requireUnusedName(ctx context.Context, name string) error {
+	items, err := a.Provider.ListItems(ctx)
+	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stdout, "Updated %q (%s, %s) in %s\n", name, p.kind, humanSize(p.size), a.Location)
+	for _, it := range items {
+		if it.Title == name {
+			return fmt.Errorf("%q already exists; choose a different name", name)
+		}
+	}
 	return nil
 }
 
@@ -131,7 +177,7 @@ func (a *App) metaTags(kind, sourceDir string) []string {
 
 func (a *App) preparePayload(o KeepOptions, name string) (*payload, error) {
 	if o.Text {
-		return a.textPayload(name)
+		return a.textPayload(name, o.TextContent)
 	}
 	abs, err := filepath.Abs(restore.ExpandHome(o.Path))
 	if err != nil {
@@ -204,9 +250,11 @@ func folderPayload(abs string) (*payload, error) {
 	}, nil
 }
 
-func (a *App) textPayload(name string) (*payload, error) {
+func (a *App) textPayload(name string, content *string) (*payload, error) {
 	var data []byte
-	if a.Console.Interactive {
+	if content != nil {
+		data = []byte(*content)
+	} else if a.Console.Interactive {
 		s, err := a.Console.ReadSecret("Text to keep (input hidden): ")
 		if err != nil {
 			return nil, err

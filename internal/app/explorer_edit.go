@@ -13,25 +13,38 @@ import (
 )
 
 func (m *explorerModel) openEdit(item provider.Item, description string) {
-	m.editing = true
 	m.editItem = item
+	m.openEditInputs("", description, strings.Join(editableStoreTags(item.Tags), ", "))
+}
+
+func (m *explorerModel) openEditInputs(name, description, storeTags string) {
+	m.editing = true
 	m.editError = ""
 	m.editFocus = 0
-
-	m.editDescriptionInput = textinput.New()
-	m.editDescriptionInput.Prompt = "> "
-	m.editDescriptionInput.Placeholder = "No description"
-	m.editDescriptionInput.SetValue(description)
-	m.editDescriptionInput.Focus()
-
-	m.editTagsInput = textinput.New()
-	m.editTagsInput.Prompt = "> "
-	m.editTagsInput.Placeholder = "project/api, environment/dev"
-	m.editTagsInput.SetValue(strings.Join(editableStoreTags(item.Tags), ", "))
-	m.editTagsInput.Blur()
-
+	m.editNameInput = newEditInput("Item name", name)
+	m.editDescriptionInput = newEditInput("No description", description)
+	m.editTagsInput = newEditInput("project/api, environment/dev", storeTags)
 	m.filter.Blur()
+	m.focusEditInput()
 	m.resizeEdit()
+}
+
+func newEditInput(placeholder, value string) textinput.Model {
+	input := textinput.New()
+	input.Prompt = "> "
+	input.Placeholder = placeholder
+	input.SetValue(value)
+	return input
+}
+
+// editInputs returns the modal's inputs in tab order. The name can be set only
+// while adding an item.
+func (m *explorerModel) editInputs() []*textinput.Model {
+	inputs := []*textinput.Model{&m.editDescriptionInput, &m.editTagsInput}
+	if m.adding() {
+		inputs = append([]*textinput.Model{&m.editNameInput}, inputs...)
+	}
+	return inputs
 }
 
 func (m *explorerModel) updateEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -43,13 +56,28 @@ func (m *explorerModel) updateEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.editing = false
 			m.editError = ""
+			if m.adding() {
+				m.backToAddSource()
+				return *m, nil
+			}
 			m.filter.Focus()
 			return *m, nil
 		case "tab", "shift+tab":
-			m.editFocus = 1 - m.editFocus
+			count := len(m.editInputs())
+			step := 1
+			if key.String() == "shift+tab" {
+				step = count - 1
+			}
+			m.editFocus = (m.editFocus + step) % count
 			m.focusEditInput()
 			return *m, nil
 		case "enter", "ctrl+s":
+			if m.adding() && strings.TrimSpace(m.editNameInput.Value()) == "" {
+				m.editError = "item name cannot be empty"
+				m.editFocus = 0
+				m.focusEditInput()
+				return *m, nil
+			}
 			userTags, err := parseEditTags(m.editTagsInput.Value())
 			if err != nil {
 				m.editError = err.Error()
@@ -57,37 +85,38 @@ func (m *explorerModel) updateEdit(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.editedDescription = m.editDescriptionInput.Value()
 			m.editedTags = userTags
+			m.done = true
+			if m.adding() {
+				m.action = explorerCreate
+				return *m, tea.Quit
+			}
 			m.actionItem = m.editItem
 			m.action = explorerSaveEdit
-			m.done = true
 			return *m, tea.Quit
 		}
 	}
 
 	var cmd tea.Cmd
-	if m.editFocus == 0 {
-		m.editDescriptionInput, cmd = m.editDescriptionInput.Update(msg)
-	} else {
-		m.editTagsInput, cmd = m.editTagsInput.Update(msg)
-	}
+	input := m.editInputs()[m.editFocus]
+	*input, cmd = input.Update(msg)
 	return *m, cmd
 }
 
 func (m *explorerModel) focusEditInput() {
-	if m.editFocus == 0 {
-		m.editDescriptionInput.Focus()
-		m.editTagsInput.Blur()
-		return
+	for i, input := range m.editInputs() {
+		if i == m.editFocus {
+			input.Focus()
+		} else {
+			input.Blur()
+		}
 	}
-	m.editDescriptionInput.Blur()
-	m.editTagsInput.Focus()
 }
 
 func (m *explorerModel) resizeEdit() {
 	// Inputs reserve their "> " prompt and a trailing cursor cell so long
 	// values scroll instead of wrapping inside the modal.
 	width := max(1, editModalInnerWidth(m.width)-3)
-	for _, input := range []*textinput.Model{&m.editDescriptionInput, &m.editTagsInput} {
+	for _, input := range m.editInputs() {
 		input.SetWidth(width)
 		// SetWidth keeps stale scroll offsets. Visiting both ends forces the
 		// input to recompute them before restoring the cursor.
@@ -105,23 +134,38 @@ func editModalWidth(termWidth int) int { return max(16, min(68, termWidth-4)) }
 func editModalInnerWidth(termWidth int) int { return editModalWidth(termWidth) - 4 }
 
 func (m explorerModel) editModalView() string {
-	contentWidth := editModalWidth(m.width)
 	innerWidth := editModalInnerWidth(m.width)
 	rows := []string{
 		explorerHeaderStyle.Render("Edit selected item"),
 		ansi.Truncate("Item: "+m.editItem.Title, innerWidth, "…"),
+	}
+	cancelHint := "Esc cancel"
+	if m.adding() {
+		rows = []string{
+			explorerHeaderStyle.Render("Add " + m.add.kind()),
+			m.addSourceRow(innerWidth),
+			explorerDetailLabel.Render("Name"),
+			m.editNameInput.View(),
+		}
+		cancelHint = "Esc back"
+	}
+	rows = append(rows,
 		explorerDetailLabel.Render("Description"),
 		m.editDescriptionInput.View(),
 		explorerDetailLabel.Render("Store tags (comma-separated)"),
 		m.editTagsInput.View(),
-	}
+	)
 	if m.editError != "" {
-		rows = append(rows, ansi.Truncate(m.editError, innerWidth, "…"))
+		rows = append(rows, ansi.Truncate(singleLine(m.editError), innerWidth, "…"))
 	}
-	rows = append(rows, explorerHintStyle.Render(ansi.Truncate("Tab switch • Enter save • Esc cancel", innerWidth, "…")))
+	rows = append(rows, explorerHintStyle.Render(ansi.Truncate("Tab switch • Enter save • "+cancelHint, innerWidth, "…")))
+	return m.modalFrame(rows)
+}
 
+func (m explorerModel) modalFrame(rows []string) string {
+	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	verticalPadding := 1
-	if len(rows)+4 > m.height {
+	if lipgloss.Height(content)+4 > m.height {
 		verticalPadding = 0
 	}
 	return lipgloss.NewStyle().
@@ -129,8 +173,8 @@ func (m explorerModel) editModalView() string {
 		BorderForeground(lipgloss.Color("69")).
 		Background(lipgloss.Color("235")).
 		Padding(verticalPadding, 1).
-		Width(contentWidth).
-		Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
+		Width(editModalWidth(m.width)).
+		Render(content)
 }
 
 func overlayContent(background, foreground string, width, height int) string {

@@ -338,7 +338,7 @@ func (a *Adapter) CreateDocument(ctx context.Context, doc provider.Document) (st
 	}
 	if doc.Description != nil {
 		if res.ID == "" {
-			return "", errors.New("document was created, but 1Password returned no item ID to set its description")
+			return "", provider.ErrCreatedWithoutID
 		}
 		if err := a.setDescription(ctx, res.ID, *doc.Description); err != nil {
 			return res.ID, fmt.Errorf("document %q was created, but setting its description failed: %w", doc.Title, err)
