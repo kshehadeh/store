@@ -82,6 +82,8 @@ type Provider interface {
 	UpdateDocument(ctx context.Context, id string, doc Document) error
 	// RenameItem changes an item's title without changing its other fields.
 	RenameItem(ctx context.Context, id, title string) error
+	// DeleteItem deletes the item with the given ID from the configured vault.
+	DeleteItem(ctx context.Context, id string) error
 	// UpdateItemMetadata sets an item's description when non-nil and replaces
 	// its tags.
 	UpdateItemMetadata(ctx context.Context, id string, description *string, tags []string) error

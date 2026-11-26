@@ -100,6 +100,7 @@ var allowed = map[string][]string{
 	"vault get":       {},
 	"item list":       {"--vault", "--tags"},
 	"item get":        {"--vault", "--reveal"},
+	"item delete":     {"--vault"},
 	"item edit":       {"--vault", "--tags", "--title"},
 	"document create": {"--vault", "--title", "--file-name", "--tags"},
 	"document edit":   {"--vault", "--title", "--file-name", "--tags"},
@@ -212,6 +213,18 @@ func run(args []string) error {
 			g.Files = []fileOut{{ID: "file-" + it.ID, Name: it.FileName, Size: len(it.Content), ContentPath: "/v1/files/" + it.ID}}
 		}
 		return emit(g)
+	case "item delete":
+		it, err := st.find(arg(pos, 2), flags["--vault"])
+		if err != nil {
+			return err
+		}
+		for i := range st.Items {
+			if &st.Items[i] == it {
+				st.Items = append(st.Items[:i], st.Items[i+1:]...)
+				return st.save()
+			}
+		}
+		return errors.New("item not found")
 	case "item edit":
 		it, err := st.find(arg(pos, 2), flags["--vault"])
 		if err != nil {

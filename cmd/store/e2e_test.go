@@ -654,6 +654,33 @@ func TestText(t *testing.T) {
 	}
 }
 
+func TestDeleteRequiresConfirmation(t *testing.T) {
+	w, a, _ := twoMachines(t)
+	id := w.seed(vaultItem{Title: "obsolete", Category: "LOGIN", Tags: []string{"store/project/api"}})
+	untagged := w.seed(vaultItem{Title: "unrelated", Category: "LOGIN"})
+
+	a.fails("interactive confirmation", opts{stdin: "yes\n"}, "delete", "obsolete")
+	a.fails("no input received", opts{interactive: true}, "delete", "obsolete")
+	a.fails("has no store/ tag", opts{interactive: true, stdin: "yes\n"}, "delete", "--id", untagged)
+	for _, answer := range []string{"no\n", "\n"} {
+		r := a.ok(opts{interactive: true, stdin: answer}, "delete", "obsolete")
+		if !strings.Contains(r.stderr, id) || !strings.Contains(r.stderr, "Delete canceled.") {
+			t.Fatalf("unexpected cancellation output: %q", r.stderr)
+		}
+	}
+	if len(w.items()) != 2 {
+		t.Fatal("an item was deleted without confirmation")
+	}
+
+	r := a.ok(opts{interactive: true, stdin: "yes\n"}, "delete", "--id", id)
+	if !strings.Contains(r.stderr, `Deleted "obsolete".`) {
+		t.Fatalf("unexpected deletion output: %q", r.stderr)
+	}
+	if items := w.items(); len(items) != 1 || items[0].ID != untagged {
+		t.Fatalf("unexpected vault items after deletion: %+v", items)
+	}
+}
+
 func TestPullWithoutSelector(t *testing.T) {
 	w, a, b := twoMachines(t)
 	b.fails("no stored items are available", opts{interactive: true, stdin: "1\n"}, "pull")

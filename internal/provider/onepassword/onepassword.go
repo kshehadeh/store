@@ -378,6 +378,11 @@ func (a *Adapter) RenameItem(ctx context.Context, id, title string) error {
 	return err
 }
 
+func (a *Adapter) DeleteItem(ctx context.Context, id string) error {
+	_, err := a.op(ctx, nil, "item", "delete", id, "--vault", a.vault)
+	return err
+}
+
 func (a *Adapter) UpdateItemMetadata(ctx context.Context, id string, description *string, itemTags []string) error {
 	args := []string{"item", "edit", id}
 	if description != nil {

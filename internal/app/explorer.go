@@ -23,6 +23,7 @@ const (
 	explorerQuit
 	explorerPull
 	explorerRename
+	explorerDelete
 	explorerEdit
 	explorerSaveEdit
 	explorerCreate
@@ -166,6 +167,11 @@ func (m explorerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, tea.Quit
+		case "ctrl+d":
+			if !m.finish(explorerDelete) {
+				return m, nil
+			}
+			return m, tea.Quit
 		case "ctrl+r":
 			if !m.finish(explorerRename) {
 				return m, nil
@@ -238,7 +244,7 @@ func (m explorerModel) frameParts() (header, footer string, bodyHeight int) {
 	)
 	status := singleLine(m.status)
 	footerLines := []string{
-		explorerHintStyle.Width(width).Render("↑↓ select  Enter pull  Ctrl+N add  Ctrl+E edit  Ctrl+R rename  Esc clear/quit"),
+		explorerHintStyle.Width(width).Render("↑↓ select  Enter pull  Ctrl+N add  Ctrl+E edit  Ctrl+R rename  Ctrl+D delete  Esc clear/quit"),
 	}
 	if status != "" {
 		footerLines = append(footerLines, lipgloss.NewStyle().Width(width).Render(ansi.Truncate(status, width, "…")))
@@ -405,6 +411,21 @@ func (a *App) TUI(ctx context.Context) error {
 			} else {
 				status = fmt.Sprintf("Pulled %q.", model.actionItem.Title)
 			}
+		case explorerDelete:
+			title, deleted, deleteErr := a.Delete(ctx, "", model.actionItem.ID)
+			if deleteErr != nil {
+				status = deleteErr.Error()
+				continue
+			}
+			if !deleted {
+				status = "Delete canceled."
+				continue
+			}
+			items, err = a.discover(ctx, nil)
+			if err != nil {
+				return err
+			}
+			status = fmt.Sprintf("Deleted %q.", title)
 		case explorerRename:
 			title, askErr := a.Console.Ask("Rename item", model.actionItem.Title)
 			if askErr != nil {

@@ -100,7 +100,7 @@ func newRoot() *cobra.Command {
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().StringP("connection", "c", "", "connection to use instead of the default (see `store connection list`)")
-	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newTUI(), newUpdate(), newConnection())
+	root.AddCommand(newSetup(), newStatus(), newKeep(), newList(), newPull(), newDelete(), newTUI(), newUpdate(), newConnection())
 	return root
 }
 

@@ -17,7 +17,7 @@ command also opens this browser when stdin is a terminal.
 
 Type to filter items, use the arrow keys to move through the list, press Enter
 to pull the selected item, Ctrl-N to add a file, folder, or text, Ctrl-E to edit
-the selected item's description and store tags, or Ctrl-R to rename it.`,
+the selected item's description and store tags, Ctrl-R to rename it, or Ctrl-D to delete it after confirmation.`,
 		Args: cobra.NoArgs,
 		RunE: runTUI,
 	}

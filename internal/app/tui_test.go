@@ -198,6 +198,15 @@ func TestExplorerLongFilterAndStatus(t *testing.T) {
 	}
 }
 
+func TestExplorerDeleteUsesSelectedItem(t *testing.T) {
+	items := []provider.Item{{ID: "a", Title: "Alpha"}, {ID: "b", Title: "Beta"}}
+	m := newExplorerModel("vault", items, "b", "", "")
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
+	if got := next.(explorerModel); got.action != explorerDelete || got.actionItem.ID != "b" || !got.done {
+		t.Fatalf("delete action = %v, item = %q, done = %t", got.action, got.actionItem.ID, got.done)
+	}
+}
+
 func TestExplorerNeedsSelectionForItemActions(t *testing.T) {
 	m := newExplorerModel("vault", nil, "", "", "")
 	next, _ := m.Update(key(tea.KeyEnter))

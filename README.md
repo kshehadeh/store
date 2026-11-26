@@ -124,7 +124,7 @@ filter or cancels; Ctrl-C cancels at any time.
 stored items. Type at the top to
 filter; the right pane shows item metadata without reading secret values. Use
 Enter to pull the selection, Ctrl-N to add an item, Ctrl-E to edit the
-selection's description and store tags, or Ctrl-R to rename it. The Edit modal changes store tags only; automatic metadata
+selection's description and store tags, Ctrl-R to rename it, or Ctrl-D to delete it after confirmation. The Edit modal changes store tags only; automatic metadata
 and other 1Password tags are preserved. Esc clears the filter or quits, and
 Ctrl-C quits. PgUp/PgDn scroll the details pane. On narrow terminals, the panes
 stack vertically.
@@ -158,6 +158,7 @@ enables simple line-based prompts for testing when stdin is not a terminal.
 | `store`, `store tui` | Browse stored items, view metadata, pull the selection, add an item, edit its description and tags, or rename it. |
 | `store pull NAME` | Pull by exact name. |
 | `store pull --tag T [--tag T]...` | Pull by tags; choose from a list when several match. |
+| `store delete NAME` or `store delete --id ID` | Delete one discoverable item. Type `yes` to confirm. |
 | `store pull --id ID` | Pull a specific item (use this in scripts when a query is ambiguous). |
 | `store update [--check]` | Install the latest release, or only report whether one exists. |
 
